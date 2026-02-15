@@ -94,7 +94,7 @@ poetry run project
 
 ## Демонстрация
 
-[![asciicast](https://asciinema.org/a/PLACEHOLDER.svg)](https://asciinema.org/a/PLACEHOLDER)
+[![asciicast](https://asciinema.org/a/SGODS6dYfkgGvuOR.svg)](https://asciinema.org/a/SGODS6dYfkgGvuOR)
 
 ## Проверка кода
 
