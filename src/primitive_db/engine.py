@@ -16,6 +16,7 @@ from src.primitive_db.core import (
     show_table_info,
     update_records,
 )
+from src.primitive_db.decorators import create_cacher
 from src.primitive_db.parser import (
     parse_delete_args,
     parse_insert_args,
@@ -77,6 +78,7 @@ def _check_table_exists(metadata, table_name):
 def run():
     """Запустить основной цикл приложения."""
     print_help()
+    cache_result = create_cacher()
 
     while True:
         metadata = load_metadata(META_FILEPATH)
@@ -111,8 +113,12 @@ def run():
                 continue
             table_name = args[1]
             columns = args[2:]
-            metadata = create_table(metadata, table_name, columns)
-            save_metadata(META_FILEPATH, metadata)
+            result = create_table(
+                metadata, table_name, columns
+            )
+            if result is not None:
+                metadata = result
+                save_metadata(META_FILEPATH, metadata)
 
         elif command == "drop_table":
             try:
@@ -127,9 +133,15 @@ def run():
                 )
                 continue
             table_name = args[1]
-            metadata = drop_table(metadata, table_name)
-            save_metadata(META_FILEPATH, metadata)
-            delete_table_data(table_name)
+            if not _check_table_exists(metadata, table_name):
+                continue
+            result = drop_table(metadata, table_name)
+            if result is not None:
+                metadata = result
+                save_metadata(META_FILEPATH, metadata)
+                if table_name not in metadata:
+                    delete_table_data(table_name)
+                cache_result = create_cacher()
 
         elif command == "list_tables":
             list_tables(metadata)
@@ -146,10 +158,12 @@ def run():
             if not _check_table_exists(metadata, table_name):
                 continue
             table_data = load_table_data(table_name)
-            table_data = insert_record(
+            result = insert_record(
                 metadata, table_name, values, table_data
             )
-            save_table_data(table_name, table_data)
+            if result is not None:
+                save_table_data(table_name, result)
+                cache_result = create_cacher()
 
         elif command == "select":
             result = parse_select_args(user_input)
@@ -162,10 +176,16 @@ def run():
             table_name, where_clause = result
             if not _check_table_exists(metadata, table_name):
                 continue
-            table_data = load_table_data(table_name)
-            records = select_records(table_data, where_clause)
+            cache_key = f"{table_name}|{where_clause}"
+            records = cache_result(
+                cache_key,
+                lambda: select_records(
+                    load_table_data(table_name), where_clause
+                ),
+            )
             columns = metadata[table_name]["columns"]
-            display_records(columns, records)
+            if records is not None:
+                display_records(columns, records)
 
         elif command == "update":
             result = parse_update_args(user_input)
@@ -179,18 +199,23 @@ def run():
             if not _check_table_exists(metadata, table_name):
                 continue
             table_data = load_table_data(table_name)
-            table_data, updated_ids = update_records(
+            result = update_records(
                 table_data, set_clause, where_clause
             )
-            if updated_ids:
-                for uid in updated_ids:
+            if result is not None:
+                table_data, updated_ids = result
+                if updated_ids:
+                    for uid in updated_ids:
+                        print(
+                            f"Запись с ID={uid} в таблице "
+                            f'"{table_name}" успешно обновлена.'
+                        )
+                    save_table_data(table_name, table_data)
+                    cache_result = create_cacher()
+                else:
                     print(
-                        f"Запись с ID={uid} в таблице "
-                        f'"{table_name}" успешно обновлена.'
+                        "Записи для обновления не найдены."
                     )
-                save_table_data(table_name, table_data)
-            else:
-                print("Записи для обновления не найдены.")
 
         elif command == "delete":
             result = parse_delete_args(user_input)
@@ -204,18 +229,24 @@ def run():
             if not _check_table_exists(metadata, table_name):
                 continue
             table_data = load_table_data(table_name)
-            table_data, deleted_ids = delete_records(
+            result = delete_records(
                 table_data, where_clause
             )
-            if deleted_ids:
-                for did in deleted_ids:
+            if result is not None:
+                table_data, deleted_ids = result
+                if deleted_ids:
+                    for did in deleted_ids:
+                        print(
+                            f"Запись с ID={did} успешно "
+                            f"удалена из таблицы "
+                            f'"{table_name}".'
+                        )
+                    save_table_data(table_name, table_data)
+                    cache_result = create_cacher()
+                else:
                     print(
-                        f"Запись с ID={did} успешно удалена "
-                        f'из таблицы "{table_name}".'
+                        "Записи для удаления не найдены."
                     )
-                save_table_data(table_name, table_data)
-            else:
-                print("Записи для удаления не найдены.")
 
         elif command == "info":
             try:

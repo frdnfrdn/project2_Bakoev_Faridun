@@ -3,73 +3,11 @@
 from prettytable import PrettyTable
 
 from src.primitive_db.constants import ID_COLUMN, ID_TYPE, VALID_TYPES
-
-
-def create_table(metadata, table_name, columns):
-    """Создать новую таблицу с указанными столбцами.
-
-    Автоматически добавляет столбец ID:int в начало.
-    Проверяет уникальность имени и корректность типов.
-    """
-    if table_name in metadata:
-        print(f'Ошибка: Таблица "{table_name}" уже существует.')
-        return metadata
-
-    parsed_columns = {ID_COLUMN: ID_TYPE}
-
-    for col_def in columns:
-        parts = col_def.split(":")
-        if len(parts) != 2:
-            print(f"Некорректное значение: {col_def}. Попробуйте снова.")
-            return metadata
-
-        col_name, col_type = parts
-
-        if col_type not in VALID_TYPES:
-            print(f"Некорректное значение: {col_type}. Попробуйте снова.")
-            return metadata
-
-        if col_name == ID_COLUMN:
-            continue
-
-        parsed_columns[col_name] = col_type
-
-    metadata[table_name] = {"columns": parsed_columns}
-
-    cols_str = ", ".join(
-        f"{name}:{typ}" for name, typ in parsed_columns.items()
-    )
-    print(
-        f'Таблица "{table_name}" успешно создана '
-        f"со столбцами: {cols_str}"
-    )
-
-    return metadata
-
-
-def drop_table(metadata, table_name):
-    """Удалить таблицу из метаданных.
-
-    Проверяет существование таблицы перед удалением.
-    """
-    if table_name not in metadata:
-        print(f'Ошибка: Таблица "{table_name}" не существует.')
-        return metadata
-
-    del metadata[table_name]
-    print(f'Таблица "{table_name}" успешно удалена.')
-
-    return metadata
-
-
-def list_tables(metadata):
-    """Показать список всех таблиц."""
-    if not metadata:
-        print("Нет созданных таблиц.")
-        return
-
-    for table_name in metadata:
-        print(f"- {table_name}")
+from src.primitive_db.decorators import (
+    confirm_action,
+    handle_db_errors,
+    log_time,
+)
 
 
 def _validate_type(value, expected_type):
@@ -103,6 +41,85 @@ def _filter_records(table_data, where_clause):
     return results
 
 
+@handle_db_errors
+def create_table(metadata, table_name, columns):
+    """Создать новую таблицу с указанными столбцами.
+
+    Автоматически добавляет столбец ID:int в начало.
+    Проверяет уникальность имени и корректность типов.
+    """
+    if table_name in metadata:
+        print(f'Ошибка: Таблица "{table_name}" уже существует.')
+        return metadata
+
+    parsed_columns = {ID_COLUMN: ID_TYPE}
+
+    for col_def in columns:
+        parts = col_def.split(":")
+        if len(parts) != 2:
+            print(
+                f"Некорректное значение: {col_def}. "
+                "Попробуйте снова."
+            )
+            return metadata
+
+        col_name, col_type = parts
+
+        if col_type not in VALID_TYPES:
+            print(
+                f"Некорректное значение: {col_type}. "
+                "Попробуйте снова."
+            )
+            return metadata
+
+        if col_name == ID_COLUMN:
+            continue
+
+        parsed_columns[col_name] = col_type
+
+    metadata[table_name] = {"columns": parsed_columns}
+
+    cols_str = ", ".join(
+        f"{name}:{typ}" for name, typ in parsed_columns.items()
+    )
+    print(
+        f'Таблица "{table_name}" успешно создана '
+        f"со столбцами: {cols_str}"
+    )
+
+    return metadata
+
+
+@handle_db_errors
+@confirm_action("удаление таблицы")
+def drop_table(metadata, table_name):
+    """Удалить таблицу из метаданных.
+
+    Проверяет существование таблицы перед удалением.
+    Запрашивает подтверждение у пользователя.
+    """
+    if table_name not in metadata:
+        print(f'Ошибка: Таблица "{table_name}" не существует.')
+        return metadata
+
+    del metadata[table_name]
+    print(f'Таблица "{table_name}" успешно удалена.')
+
+    return metadata
+
+
+def list_tables(metadata):
+    """Показать список всех таблиц."""
+    if not metadata:
+        print("Нет созданных таблиц.")
+        return
+
+    for table_name in metadata:
+        print(f"- {table_name}")
+
+
+@handle_db_errors
+@log_time
 def insert_record(metadata, table_name, values, table_data):
     """Добавить новую запись в таблицу.
 
@@ -130,7 +147,8 @@ def insert_record(metadata, table_name, values, table_data):
         if not _validate_type(values[i], col_type):
             print(
                 f"Некорректное значение: {values[i]} "
-                f'для столбца "{col_name}" (ожидается {col_type}).'
+                f'для столбца "{col_name}" '
+                f"(ожидается {col_type})."
             )
             return table_data
 
@@ -148,6 +166,8 @@ def insert_record(metadata, table_name, values, table_data):
     return table_data
 
 
+@handle_db_errors
+@log_time
 def select_records(table_data, where_clause=None):
     """Выбрать записи, опционально с фильтрацией по where."""
     if where_clause is None:
@@ -155,6 +175,7 @@ def select_records(table_data, where_clause=None):
     return _filter_records(table_data, where_clause)
 
 
+@handle_db_errors
 def update_records(table_data, set_clause, where_clause):
     """Обновить записи, соответствующие условию where."""
     updated_ids = []
@@ -171,8 +192,13 @@ def update_records(table_data, set_clause, where_clause):
     return table_data, updated_ids
 
 
+@handle_db_errors
+@confirm_action("удаление записей")
 def delete_records(table_data, where_clause):
-    """Удалить записи, соответствующие условию where."""
+    """Удалить записи, соответствующие условию where.
+
+    Запрашивает подтверждение у пользователя.
+    """
     deleted_ids = []
     new_data = []
 
