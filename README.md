@@ -92,6 +92,10 @@ poetry run project
 Операция отменена.
 ```
 
+## Демонстрация
+
+[![asciicast](https://asciinema.org/a/PLACEHOLDER.svg)](https://asciinema.org/a/PLACEHOLDER)
+
 ## Проверка кода
 
 ```bash

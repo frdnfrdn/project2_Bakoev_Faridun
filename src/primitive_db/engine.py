@@ -4,7 +4,7 @@ import shlex
 
 import prompt
 
-from src.primitive_db.constants import META_FILEPATH
+from src.primitive_db.constants import META_FILEPATH, PROMPT_TEXT
 from src.primitive_db.core import (
     create_table,
     delete_records,
@@ -82,7 +82,7 @@ def run():
 
     while True:
         metadata = load_metadata(META_FILEPATH)
-        user_input = prompt.string(">>>Введите команду: ")
+        user_input = prompt.string(PROMPT_TEXT)
 
         if user_input is None:
             continue
